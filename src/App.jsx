@@ -113,11 +113,11 @@ function App() {
           path="/"
           element={
             !user ? (
-              <Login
-                onLogin={handleLogin}
+              <Register
+                onRegister={handleRegister}
                 loading={loading}
-                error={loginError}
-                onRegisterClick={() => navigate('/register')}
+                error={registerError}
+                onBack={() => navigate('/login')}
               />
             ) : (
               <Navigate to={user.is_admin ? '/admin' : '/dashboard'} />
@@ -125,14 +125,14 @@ function App() {
           }
         />
         <Route
-          path="/register"
+          path="/login"
           element={
             !user ? (
-              <Register
-                onRegister={handleRegister}
+              <Login
+                onLogin={handleLogin}
                 loading={loading}
-                error={registerError}
-                onBack={() => navigate('/')}
+                error={loginError}
+                onRegisterClick={() => navigate('/')}
               />
             ) : (
               <Navigate to={user.is_admin ? '/admin' : '/dashboard'} />

@@ -20,7 +20,7 @@ export default function Login({ onLogin, loading, error, onRegisterClick }) {
       <form onSubmit={handleSubmit} className="bg-white p-6 sm:p-8 rounded shadow-md w-full max-w-xs border border-[var(--color-laranja-itau)]">
         <h2 className="text-2xl font-bold mb-6 text-center text-[var(--color-marinho-itau)] tracking-wide">Entrar</h2>
         <div className="mb-4">
-          <label className="block mb-1 text-sm font-medium">Usuário</label>
+          <label className="block mb-1 text-sm font-medium">Nome</label>
           <input
             type="text"
             className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-laranja-itau)]"
@@ -50,7 +50,7 @@ export default function Login({ onLogin, loading, error, onRegisterClick }) {
         </button>
         <button
           type="button"
-          className="w-full border border-[var(--color-laranja-itau)] text-[var(--color-laranja-itau)] py-2 rounded font-semibold hover:bg-orange-50 transition"
+          className="w-full text-xs text-[var(--color-laranja-itau)] underline hover:text-orange-700 mt-1"
           onClick={onRegisterClick}
           disabled={loading}
         >

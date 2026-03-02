@@ -108,12 +108,15 @@ export default function UserDashboard({ user }) {
       {/* Removido: meses pendentes em texto, pois agora é visual na grade */}
       <form onSubmit={handleUpload} className="mb-4 flex flex-col gap-3">
         <label className="block mb-2 font-semibold">Selecione os meses que está pagando:</label>
+        <div className="text-center font-bold text-lg mb-2">2026</div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
           {MESES_2026.map(mes => {
             const isPago = mesesPagos.includes(mes);
             const isPendente = mesesPendentes.includes(mes);
             const isDisponivel = !isPago && !isPendente;
             const isSelecionado = selectedMeses.includes(mes);
+            // Extrai só o nome do mês
+            const nomeMes = mes.split('/')[0];
             return (
               <button
                 type="button"
@@ -137,7 +140,7 @@ export default function UserDashboard({ user }) {
                 tabIndex={!isDisponivel ? -1 : 0}
                 aria-pressed={isSelecionado}
               >
-                {mes}
+                {nomeMes}
               </button>
             );
           })}

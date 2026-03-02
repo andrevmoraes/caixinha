@@ -1,0 +1,3 @@
+// Configuração de exemplo para Supabase
+export const supabaseUrl = 'https://trndsazwuijnxsxfhakb.supabase.co';
+export const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRybmRzYXp3dWlqbnhzeGZoYWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzOTgyNDgsImV4cCI6MjA4Nzk3NDI0OH0.5i5hAFBf06Fh0qF3ltmCRmMoZBA6i8-mbD-Sm4umBTw';

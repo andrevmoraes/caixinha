@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* Customização do tema inspirada no Itaú */
+@theme {
+  --color-laranja-itau: #ec7000;
+  --color-marinho-itau: #003366;
+  --color-cinza-claro: #f5f5f5;
+  
+  --font-family-sans: system-ui, -apple-system, sans-serif;
+}

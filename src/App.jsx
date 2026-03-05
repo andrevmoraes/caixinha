@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 import Register from './components/Register';
 import { supabase } from './lib/supabaseClient';
+import { validateUsername, validatePin } from './lib/validation';
 import UserDashboard from './components/UserDashboard';
 import AdminPanel from './components/AdminPanel';
 import Header from './components/Header';
@@ -21,26 +22,88 @@ function App() {
   useEffect(() => {
     const savedUser = localStorage.getItem('caixinha_user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      const userData = JSON.parse(savedUser);
+      setUser(userData);
+      // Reconfigura o RLS context para o usuário carregado
+      console.log('🔧 [APP] Reconfigurando RLS para usuário do localStorage:', userData.id);
+      supabase.rpc('set_current_user_id', { user_id: userData.id }).then(({ error }) => {
+        if (error) {
+          console.error('❌ [APP] Erro ao reconfigurar RLS:', error);
+        } else {
+          console.log('✅ [APP] RLS reconfigurado com sucesso');
+        }
+      });
     }
   }, []);
 
   const handleLogin = async (username, pin) => {
     setLoading(true);
     setLoginError('');
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('username', username)
-      .eq('pin', pin)
-      .single();
-    setLoading(false);
-    if (error || !data) {
-      setLoginError('Usuário ou PIN inválido.');
+    
+    console.log('🔐 [LOGIN] Iniciando login...');
+    
+    // Validação
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+      console.log('❌ [LOGIN] Validação de username falhou:', usernameValidation.error);
+      setLoginError(usernameValidation.error);
+      setLoading(false);
       return;
     }
+
+    const pinValidation = validatePin(pin);
+    if (!pinValidation.valid) {
+      console.log('❌ [LOGIN] Validação de PIN falhou:', pinValidation.error);
+      setLoginError(pinValidation.error);
+      setLoading(false);
+      return;
+    }
+
+    console.log('✅ [LOGIN] Validações passaram. Buscando perfil no Supabase...');
+    console.log('🔍 [LOGIN] Buscando username:', usernameValidation.sanitized, 'pin:', pinValidation.sanitized);
+    
+    const { data, error, count } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact' })
+      .eq('username', usernameValidation.sanitized)
+      .eq('pin', pinValidation.sanitized)
+      .maybeSingle();
+    
+    console.log('📊 [LOGIN] Resultado da query - data:', data, 'error:', error, 'count:', count);
+    
+    if (error) {
+      console.error('❌ [LOGIN] Erro do Supabase:', error);
+      console.error('❌ [LOGIN] IMPORTANTE: Você aplicou o script SQL no Supabase? Veja supabase_security_policies.sql');
+      setLoginError('Erro ao conectar. Verifique se o RLS foi configurado corretamente.');
+      setLoading(false);
+      return;
+    }
+    
+    if (!data) {
+      console.log('❌ [LOGIN] Nenhum usuário encontrado (RLS pode estar bloqueando ou credenciais incorretas)');
+      setLoginError('Usuário ou PIN inválido.');
+      setLoading(false);
+      return;
+    }
+    
+    console.log('✅ [LOGIN] Usuário encontrado:', data.username);
+    console.log('🔧 [LOGIN] Configurando current_user_id para RLS...');
+    
+    // Configurar user_id para RLS
+    const { error: rpcError } = await supabase.rpc('set_current_user_id', { user_id: data.id });
+    
+    if (rpcError) {
+      console.error('❌ [LOGIN] Erro ao configurar RLS:', rpcError);
+    } else {
+      console.log('✅ [LOGIN] RLS configurado com sucesso');
+    }
+    
     setUser(data);
     localStorage.setItem('caixinha_user', JSON.stringify(data));
+    setLoading(false);
+    
+    console.log('🎉 [LOGIN] Login completo! Redirecionando...');
+    
     if (data.is_admin) {
       navigate('/admin');
     } else {
@@ -51,10 +114,26 @@ function App() {
   const handleRegister = async (username, pin) => {
     setLoading(true);
     setRegisterError('');
+    
+    // Validação
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+      setRegisterError(usernameValidation.error);
+      setLoading(false);
+      return;
+    }
+
+    const pinValidation = validatePin(pin);
+    if (!pinValidation.valid) {
+      setRegisterError(pinValidation.error);
+      setLoading(false);
+      return;
+    }
+
     const { data: existing } = await supabase
       .from('profiles')
       .select('id')
-      .eq('username', username)
+      .eq('username', usernameValidation.sanitized)
       .single();
     if (existing) {
       setRegisterError('Nome de usuário já existe.');
@@ -63,7 +142,7 @@ function App() {
     }
     const { data, error } = await supabase
       .from('profiles')
-      .insert({ username, pin })
+      .insert({ username: usernameValidation.sanitized, pin: pinValidation.sanitized })
       .select()
       .single();
     setLoading(false);
@@ -71,6 +150,10 @@ function App() {
       setRegisterError('Erro ao cadastrar. Tente outro nome.');
       return;
     }
+    
+    // Configurar user_id para RLS
+    await supabase.rpc('set_current_user_id', { user_id: data.id });
+    
     setUser(data);
     localStorage.setItem('caixinha_user', JSON.stringify(data));
     navigate('/dashboard');
@@ -85,12 +168,24 @@ function App() {
 
   const handleUpdateProfile = async (username, pin) => {
     if (!user) return false;
+    
+    // Validação
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+      return false;
+    }
+
+    const pinValidation = validatePin(pin);
+    if (!pinValidation.valid) {
+      return false;
+    }
+
     const { error } = await supabase
       .from('profiles')
-      .update({ username, pin })
+      .update({ username: usernameValidation.sanitized, pin: pinValidation.sanitized })
       .eq('id', user.id);
     if (!error) {
-      const updatedUser = { ...user, username, pin };
+      const updatedUser = { ...user, username: usernameValidation.sanitized, pin: pinValidation.sanitized };
       setUser(updatedUser);
       localStorage.setItem('caixinha_user', JSON.stringify(updatedUser));
     }

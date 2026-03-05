@@ -1,0 +1,57 @@
+-- ============================================
+-- POLÍTICAS STORAGE BUCKET 'receipts' - VERSÃO DEBUG
+-- ============================================
+-- ATENÇÃO: Execute via SUPABASE DASHBOARD, não via SQL Editor!
+-- 
+-- COMO APLICAR:
+-- 1. Vá em: Storage > receipts > Policies
+-- 2. REMOVA todas as políticas existentes
+-- 3. Clique "New Policy" > "For full customization"
+-- 4. Cole as definições abaixo
+--
+-- ⚠️ VERSÃO TEMPORÁRIA PARA DEBUG - Permite tudo para testar
+-- ============================================
+
+-- POLÍTICA 1: Permitir UPLOAD para todos (TEMPORÁRIO)
+-- Nome: "Allow all uploads (temporary)"
+-- Allowed operations: INSERT
+-- Target roles: public
+-- Policy definition:
+(bucket_id = 'receipts'::text)
+
+-- POLÍTICA 2: Permitir LEITURA para todos (TEMPORÁRIO)
+-- Nome: "Allow all reads (temporary)"
+-- Allowed operations: SELECT
+-- Target roles: public
+-- Policy definition:
+(bucket_id = 'receipts'::text)
+
+-- POLÍTICA 3: Permitir UPDATE para todos (TEMPORÁRIO)
+-- Nome: "Allow all updates (temporary)"
+-- Allowed operations: UPDATE
+-- Target roles: public
+-- Policy definition:
+(bucket_id = 'receipts'::text)
+
+-- POLÍTICA 4: Permitir DELETE para todos (TEMPORÁRIO)
+-- Nome: "Allow all deletes (temporary)"
+-- Allowed operations: DELETE
+-- Target roles: public
+-- Policy definition:
+(bucket_id = 'receipts'::text)
+
+-- ============================================
+-- DEPOIS QUE FUNCIONAR, APLICAR VERSÃO SEGURA:
+-- ============================================
+-- Substitua as políticas acima por estas (UMA DE CADA VEZ):
+
+-- POLÍTICA 1 SEGURA: Upload apenas para própria pasta
+-- ((bucket_id = 'receipts'::text) 
+--   AND ((storage.foldername(name))[1] = current_setting('app.current_user_id'::text, true)))
+
+-- POLÍTICA 2 SEGURA: Leitura de próprios arquivos + admins
+-- ((bucket_id = 'receipts'::text) 
+--   AND (
+--     ((storage.foldername(name))[1] = current_setting('app.current_user_id'::text, true))
+--     OR (current_setting('app.is_admin'::text, true) = 'true'::text)
+--   ))

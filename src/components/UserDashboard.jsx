@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { validateSelectedMonths, validateReceiptFile } from '../lib/validation';
 
 const MESES_2026 = [
   'Janeiro/2026', 'Fevereiro/2026', 'Março/2026', 'Abril/2026',
@@ -10,6 +11,7 @@ const MESES_2026 = [
 export default function UserDashboard({ user }) {
   const [pagamentos, setPagamentos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState('');
   const [file, setFile] = useState(null);
     // Se houver arquivo compartilhado via Web Share Target, já preencher
     useEffect(() => {
@@ -33,11 +35,21 @@ export default function UserDashboard({ user }) {
   useEffect(() => {
     async function fetchPagamentos() {
       setLoading(true);
+      setLoadingError('');
+      console.log('🔍 [DASHBOARD] Buscando pagamentos para user_id:', user.id);
       const { data, error } = await supabase
         .from('payments')
         .select('*')
         .eq('user_id', user.id);
-      setPagamentos(data || []);
+      
+      if (error) {
+        console.error('❌ [DASHBOARD] Erro ao buscar pagamentos:', error);
+        setLoadingError(`Erro ao carregar dados: ${error.message}`);
+        setPagamentos([]);
+      } else {
+        console.log('✅ [DASHBOARD] Pagamentos carregados:', data?.length || 0);
+        setPagamentos(data || []);
+      }
       setLoading(false);
     }
     fetchPagamentos();
@@ -53,10 +65,21 @@ export default function UserDashboard({ user }) {
 
   async function handleUpload(e) {
     e.preventDefault();
-    if (!file || selectedMeses.length === 0 || !valor) {
-      setUploadMsg('Selecione ao menos um mês e informe o valor.');
+    
+    // Validação de meses
+    const monthsValidation = validateSelectedMonths(selectedMeses);
+    if (!monthsValidation.valid) {
+      setUploadMsg(monthsValidation.error);
       return;
     }
+
+    // Validação de arquivo
+    const fileValidation = validateReceiptFile(file);
+    if (!fileValidation.valid) {
+      setUploadMsg(fileValidation.error);
+      return;
+    }
+
     setUploading(true);
     setUploadMsg('');
     const fileExt = file.name.split('.').pop();
@@ -64,7 +87,7 @@ export default function UserDashboard({ user }) {
     const sanitize = (str) => str
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
       .replace(/[^a-zA-Z0-9_-]/g, '_'); // substitui caracteres especiais por underscore
-    const safeMeses = selectedMeses.map(m => sanitize(m));
+    const safeMeses = monthsValidation.sanitized.map(m => sanitize(m));
     const filePath = `${user.id}/${safeMeses.join('_')}.${fileExt}`;
     let { error: uploadError } = await supabase.storage.from('receipts').upload(filePath, file);
     if (uploadError) {
@@ -73,19 +96,25 @@ export default function UserDashboard({ user }) {
       return;
     }
     // Cria um registro para cada mês selecionado
+    console.log('📝 [UPLOAD] Criando registros de pagamento - user.id:', user.id);
     let erroRegistro = null;
-    for (const month_ref of selectedMeses) {
-      const { error: insertError } = await supabase.from('payments').insert({
+    for (const month_ref of monthsValidation.sanitized) {
+      console.log('💾 [UPLOAD] Inserindo mês:', month_ref);
+      const { data: insertData, error: insertError } = await supabase.from('payments').insert({
         user_id: user.id,
         month_ref,
         amount: 10.00,
         receipt_url: filePath,
         status: 'pending'
       });
-      if (insertError) erroRegistro = insertError;
+      console.log('📊 [UPLOAD] Resultado INSERT - data:', insertData, 'error:', insertError);
+      if (insertError) {
+        console.error('❌ [UPLOAD] ERRO COMPLETO:', JSON.stringify(insertError, null, 2));
+        erroRegistro = insertError;
+      }
     }
     if (erroRegistro) {
-      setUploadMsg(`Erro ao registrar pagamento: ${erroRegistro.message}`);
+      setUploadMsg(`Erro ao registrar pagamento: ${erroRegistro.message}, code: ${erroRegistro.code}`);
     } else {
       setUploadMsg('Comprovante enviado! Aguarde aprovação.');
       setFile(null);
@@ -104,6 +133,11 @@ export default function UserDashboard({ user }) {
   return (
     <div className="max-w-md mx-auto bg-white rounded shadow p-4 sm:p-6 mt-4 sm:mt-8 border border-[var(--color-laranja-itau)]">
       <h2 className="text-xl font-bold mb-4 text-[var(--color-marinho-itau)] tracking-wide">Olá, {user.username}!</h2>
+      {loadingError && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          {loadingError}
+        </div>
+      )}
       {/* Grade de meses */}
       {/* Removido: meses pendentes em texto, pois agora é visual na grade */}
       <form onSubmit={handleUpload} className="mb-4 flex flex-col gap-3">

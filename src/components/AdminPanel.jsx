@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { validateAmount, validateDescription, validateTransactionType } from '../lib/validation';
 
 export default function AdminPanel({ user }) {
   const [pagamentos, setPagamentos] = useState([]);
@@ -40,14 +41,29 @@ export default function AdminPanel({ user }) {
   }
 
   async function registrarTransacao() {
-    if (!valorTransacao || !descricaoTransacao) {
-      alert('Preencha o valor e a descrição.');
+    // Validação
+    const valorValidation = validateAmount(valorTransacao);
+    if (!valorValidation.valid) {
+      alert(valorValidation.error);
       return;
     }
+
+    const descricaoValidation = validateDescription(descricaoTransacao);
+    if (!descricaoValidation.valid) {
+      alert(descricaoValidation.error);
+      return;
+    }
+
+    const tipoValidation = validateTransactionType(tipoTransacao);
+    if (!tipoValidation.valid) {
+      alert(tipoValidation.error);
+      return;
+    }
+
     const { error } = await supabase.from('transactions').insert({
-      tipo: tipoTransacao,
-      valor: Number(valorTransacao.replace(',', '.')),
-      descricao: descricaoTransacao,
+      tipo: tipoValidation.sanitized,
+      valor: valorValidation.sanitized,
+      descricao: descricaoValidation.sanitized,
       admin_id: user.id
     });
     if (error) {

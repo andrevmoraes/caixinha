@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { validateAmount, validateDescription, validateTransactionType } from '../lib/validation';
 
@@ -11,29 +11,90 @@ export default function AdminPanel({ user }) {
   const [tipoTransacao, setTipoTransacao] = useState('saida');
   const [valorTransacao, setValorTransacao] = useState('');
   const [descricaoTransacao, setDescricaoTransacao] = useState('');
+  const [isFetching, setIsFetching] = useState(false);
+  const lastUserId = useRef(null);
 
   useEffect(() => {
     // Garante que RLS está configurado antes de buscar dados
     const initData = async () => {
+      // Verifica se é o mesmo usuário (evita re-execução no Strict Mode)
+      if (lastUserId.current === user.id && isFetching) {
+        console.log('⚠️ [ADMIN] Mesmo usuário, busca já em andamento, ignorando...');
+        return;
+      }
+      
+      // Se mudou de usuário, reseta o estado
+      if (lastUserId.current !== user.id) {
+        console.log('🔄 [ADMIN] Novo usuário detectado, resetando estado...');
+        lastUserId.current = user.id;
+        setIsFetching(false);
+      }
+      
+      if (isFetching) {
+        console.log('⚠️ [ADMIN] Já há uma busca em andamento, ignorando...');
+        return;
+      }
+      
       console.log('🔧 [ADMIN] Iniciando configuração - user.id:', user.id, 'is_admin:', user.is_admin);
+      
+      if (!user.is_admin) {
+        console.error('❌ [ADMIN] Usuário não é admin!');
+        setError('Você não tem permissão de administrador.');
+        setLoading(false);
+        return;
+      }
+      
+      // Configura o RLS com user_id (isso também configura is_admin automaticamente)
       const { data: rlsData, error: rlsError } = await supabase.rpc('set_current_user_id', { user_id: user.id });
       console.log('🔧 [ADMIN] Resultado RLS - data:', rlsData, 'error:', rlsError);
+      
       if (rlsError) {
         console.error('❌ [ADMIN] ERRO ao configurar RLS:', rlsError);
-      } else {
-        console.log('✅ [ADMIN] RLS configurado com sucesso');
+        setError(`Erro ao configurar RLS: ${rlsError.message}`);
+        setLoading(false);
+        return;
       }
+      
+      console.log('✅ [ADMIN] RLS configurado com sucesso');
+      
+      // Verifica se o is_admin foi configurado corretamente
+      try {
+        const { data: checkData, error: checkError } = await supabase.rpc('get_current_setting', { setting_name: 'app.is_admin' });
+        console.log('🔍 [ADMIN] Verificação app.is_admin:', checkData, 'error:', checkError);
+      } catch (e) {
+        console.log('⚠️ [ADMIN] Não foi possível verificar app.is_admin (função pode não existir)');
+      }
+      
+      // Adiciona um pequeno delay para garantir que o RLS foi aplicado
+      console.log('⏳ [ADMIN] Aguardando 200ms para garantir aplicação do RLS...');
+      await new Promise(resolve => setTimeout(resolve, 200));
+      console.log('✅ [ADMIN] Delay concluído, iniciando busca de dados...');
+      
       await fetchData();
     };
+    
     initData();
+    
+    // Cleanup: reseta o flag quando o componente desmonta
+    return () => {
+      console.log('🧹 [ADMIN] Cleanup do useEffect');
+      setIsFetching(false);
+    };
   }, [user.id]);
 
   async function fetchData() {
+    if (isFetching) {
+      console.log('⚠️ [ADMIN] fetchData já está em execução, abortando...');
+      return;
+    }
+    
     const fetchId = Date.now();
     console.log(`🔍 [ADMIN-${fetchId}] Buscando dados...`);
     console.log(`🔍 [ADMIN-${fetchId}] User ID atual:`, user.id);
+    console.log(`🔍 [ADMIN-${fetchId}] Is admin:`, user.is_admin);
     console.log(`🔍 [ADMIN-${fetchId}] Timestamp:`, new Date().toISOString());
     
+    setIsFetching(true);
     setLoading(true);
     setError('');
     
@@ -75,6 +136,9 @@ export default function AdminPanel({ user }) {
       setError(`Erro ao carregar pagamentos: ${pagamentosError.message}`);
     } else {
       console.log(`✅ [ADMIN-${fetchId}] Pagamentos carregados:`, pagamentosData?.length || 0);
+      if (pagamentosData?.length === 0) {
+        console.warn(`⚠️ [ADMIN-${fetchId}] ATENÇÃO: Nenhum pagamento retornado! Pode ser problema de RLS.`);
+      }
     }
     
     if (transacoesError) {
@@ -88,6 +152,7 @@ export default function AdminPanel({ user }) {
     setPagamentos(pagamentosData || []);
     setTransacoes(transacoesData || []);
     setLoading(false);
+    setIsFetching(false);
   }
 
   async function atualizarStatusPorSolicitacao(receipt_url, status) {
@@ -260,7 +325,18 @@ export default function AdminPanel({ user }) {
       <h3 className="text-lg font-bold mb-2 text-[var(--color-marinho-itau)]">Solicitações de Pagamento</h3>
       {loading ? <p>Carregando...</p> : (
         pagamentos.length === 0 ? (
-          <p className="text-gray-500 text-sm">Nenhuma solicitação de pagamento.</p>
+          <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4">
+            <p className="text-yellow-800 font-semibold mb-2">⚠️ Nenhuma solicitação de pagamento encontrada</p>
+            <p className="text-sm text-yellow-700">
+              Se você é administrador e deveria ver pagamentos aqui:
+            </p>
+            <ul className="text-xs text-yellow-700 mt-2 ml-4 list-disc">
+              <li>Verifique se você aplicou o script <code className="bg-yellow-100 px-1">supabase_security_policies.sql</code> no Supabase</li>
+              <li>Confirme que há pagamentos cadastrados no sistema</li>
+              <li>Verifique se seu usuário tem <code className="bg-yellow-100 px-1">is_admin = true</code> na tabela profiles</li>
+              <li>Tente clicar no botão "↻ Atualizar" acima</li>
+            </ul>
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             {Object.entries(

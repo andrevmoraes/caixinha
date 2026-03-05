@@ -35,8 +35,14 @@ export default function UserDashboard({ user }) {
   useEffect(() => {
     // Garante que RLS está configurado antes de buscar dados
     const initData = async () => {
-      console.log('🔧 [DASHBOARD] Configurando RLS antes de buscar dados...');
-      await supabase.rpc('set_current_user_id', { user_id: user.id });
+      console.log('🔧 [DASHBOARD] Iniciando configuração - user.id:', user.id, 'username:', user.username);
+      const { data: rlsData, error: rlsError } = await supabase.rpc('set_current_user_id', { user_id: user.id });
+      console.log('🔧 [DASHBOARD] Resultado RLS - data:', rlsData, 'error:', rlsError);
+      if (rlsError) {
+        console.error('❌ [DASHBOARD] ERRO ao configurar RLS:', rlsError);
+      } else {
+        console.log('✅ [DASHBOARD] RLS configurado com sucesso');
+      }
       await fetchPagamentos();
     };
     initData();
@@ -46,17 +52,24 @@ export default function UserDashboard({ user }) {
     setLoading(true);
     setLoadingError('');
     console.log('🔍 [DASHBOARD] Buscando pagamentos para user_id:', user.id);
-    const { data, error } = await supabase
+    console.log('🔍 [DASHBOARD] Timestamp:', new Date().toISOString());
+    
+    const { data, error, status, statusText } = await supabase
       .from('payments')
       .select('*')
       .eq('user_id', user.id);
     
+    console.log('📊 [DASHBOARD] Resultado - status:', status, 'statusText:', statusText);
+    console.log('📊 [DASHBOARD] Data length:', data?.length, 'error:', error);
+    
     if (error) {
       console.error('❌ [DASHBOARD] Erro ao buscar pagamentos:', error);
+      console.error('❌ [DASHBOARD] ERRO DETALHADO:', JSON.stringify(error, null, 2));
       setLoadingError(`Erro ao carregar dados: ${error.message}`);
       setPagamentos([]);
     } else {
       console.log('✅ [DASHBOARD] Pagamentos carregados:', data?.length || 0);
+      console.log('💾 [DASHBOARD] Salvando no estado...');
       setPagamentos(data || []);
     }
     setLoading(false);

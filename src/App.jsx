@@ -20,19 +20,23 @@ function App() {
 
   // Carrega usuário do localStorage ao montar o componente
   useEffect(() => {
+    console.log('🚀 [APP] Iniciando aplicação...');
     const savedUser = localStorage.getItem('caixinha_user');
     if (savedUser) {
       const userData = JSON.parse(savedUser);
+      console.log('👤 [APP] Usuário encontrado no localStorage:', userData.username, 'id:', userData.id);
       setUser(userData);
       // Reconfigura o RLS context para o usuário carregado
       console.log('🔧 [APP] Reconfigurando RLS para usuário do localStorage:', userData.id);
-      supabase.rpc('set_current_user_id', { user_id: userData.id }).then(({ error }) => {
+      supabase.rpc('set_current_user_id', { user_id: userData.id }).then(({ data, error }) => {
         if (error) {
           console.error('❌ [APP] Erro ao reconfigurar RLS:', error);
         } else {
-          console.log('✅ [APP] RLS reconfigurado com sucesso');
+          console.log('✅ [APP] RLS reconfigurado com sucesso - data:', data);
         }
       });
+    } else {
+      console.log('👤 [APP] Nenhum usuário no localStorage');
     }
   }, []);
 
@@ -86,16 +90,16 @@ function App() {
       return;
     }
     
-    console.log('✅ [LOGIN] Usuário encontrado:', data.username);
+    console.log('✅ [LOGIN] Usuário encontrado:', data.username, 'id:', data.id, 'is_admin:', data.is_admin);
     console.log('🔧 [LOGIN] Configurando current_user_id para RLS...');
     
     // Configurar user_id para RLS
-    const { error: rpcError } = await supabase.rpc('set_current_user_id', { user_id: data.id });
+    const { data: rlsData, error: rpcError } = await supabase.rpc('set_current_user_id', { user_id: data.id });
     
     if (rpcError) {
       console.error('❌ [LOGIN] Erro ao configurar RLS:', rpcError);
     } else {
-      console.log('✅ [LOGIN] RLS configurado com sucesso');
+      console.log('✅ [LOGIN] RLS configurado com sucesso - data:', rlsData);
     }
     
     setUser(data);
@@ -147,15 +151,26 @@ function App() {
       .single();
     setLoading(false);
     if (error || !data) {
+      console.error('❌ [REGISTER] Erro ao cadastrar:', error);
       setRegisterError('Erro ao cadastrar. Tente outro nome.');
       return;
     }
     
+    console.log('✅ [REGISTER] Usuário cadastrado:', data.username, 'id:', data.id);
+    console.log('🔧 [REGISTER] Configurando RLS...');
+    
     // Configurar user_id para RLS
-    await supabase.rpc('set_current_user_id', { user_id: data.id });
+    const { data: rlsData, error: rlsError } = await supabase.rpc('set_current_user_id', { user_id: data.id });
+    
+    if (rlsError) {
+      console.error('❌ [REGISTER] Erro ao configurar RLS:', rlsError);
+    } else {
+      console.log('✅ [REGISTER] RLS configurado com sucesso - data:', rlsData);
+    }
     
     setUser(data);
     localStorage.setItem('caixinha_user', JSON.stringify(data));
+    console.log('🎉 [REGISTER] Cadastro completo! Redirecionando...');
     navigate('/dashboard');
   };
 

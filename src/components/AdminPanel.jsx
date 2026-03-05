@@ -15,60 +15,92 @@ export default function AdminPanel({ user }) {
   useEffect(() => {
     // Garante que RLS está configurado antes de buscar dados
     const initData = async () => {
-      console.log('🔧 [ADMIN] Configurando RLS antes de buscar dados...');
-      await supabase.rpc('set_current_user_id', { user_id: user.id });
+      console.log('🔧 [ADMIN] Iniciando configuração - user.id:', user.id, 'is_admin:', user.is_admin);
+      const { data: rlsData, error: rlsError } = await supabase.rpc('set_current_user_id', { user_id: user.id });
+      console.log('🔧 [ADMIN] Resultado RLS - data:', rlsData, 'error:', rlsError);
+      if (rlsError) {
+        console.error('❌ [ADMIN] ERRO ao configurar RLS:', rlsError);
+      } else {
+        console.log('✅ [ADMIN] RLS configurado com sucesso');
+      }
       await fetchData();
     };
     initData();
   }, [user.id]);
 
   async function fetchData() {
+    const fetchId = Date.now();
+    console.log(`🔍 [ADMIN-${fetchId}] Buscando dados...`);
+    console.log(`🔍 [ADMIN-${fetchId}] User ID atual:`, user.id);
+    console.log(`🔍 [ADMIN-${fetchId}] Timestamp:`, new Date().toISOString());
+    
     setLoading(true);
     setError('');
     
-    console.log('🔍 [ADMIN] Buscando dados...');
-    
     // Faz as duas consultas em paralelo e aguarda ambas
+    console.log(`📡 [ADMIN-${fetchId}] Iniciando query de pagamentos...`);
+    const pagamentosPromise = supabase
+      .from('payments')
+      .select('*, profiles(username)')
+      .order('created_at', { ascending: false });
+    
+    console.log(`📡 [ADMIN-${fetchId}] Iniciando query de transações...`);
+    const transacoesPromise = supabase
+      .from('transactions')
+      .select('*, profiles(username)')
+      .order('created_at', { ascending: false });
+    
     const [pagamentosResult, transacoesResult] = await Promise.all([
-      supabase
-        .from('payments')
-        .select('*, profiles(username)')
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('transactions')
-        .select('*, profiles(username)')
-        .order('created_at', { ascending: false })
+      pagamentosPromise,
+      transacoesPromise
     ]);
     
-    const { data: pagamentosData, error: pagamentosError } = pagamentosResult;
-    const { data: transacoesData, error: transacoesError } = transacoesResult;
+    const { data: pagamentosData, error: pagamentosError, status: pagamentosStatus, statusText: pagamentosStatusText } = pagamentosResult;
+    const { data: transacoesData, error: transacoesError, status: transacoesStatus, statusText: transacoesStatusText } = transacoesResult;
+    
+    console.log(`📊 [ADMIN-${fetchId}] Resultado pagamentos - status:`, pagamentosStatus, 'statusText:', pagamentosStatusText);
+    console.log(`📊 [ADMIN-${fetchId}] Pagamentos - data:`, pagamentosData?.length, 'error:', pagamentosError);
+    if (pagamentosError) {
+      console.error(`❌ [ADMIN-${fetchId}] ERRO DETALHADO pagamentos:`, JSON.stringify(pagamentosError, null, 2));
+    }
+    
+    console.log(`📊 [ADMIN-${fetchId}] Resultado transações - status:`, transacoesStatus, 'statusText:', transacoesStatusText);
+    console.log(`📊 [ADMIN-${fetchId}] Transações - data:`, transacoesData?.length, 'error:', transacoesError);
+    if (transacoesError) {
+      console.error(`❌ [ADMIN-${fetchId}] ERRO DETALHADO transações:`, JSON.stringify(transacoesError, null, 2));
+    }
     
     if (pagamentosError) {
-      console.error('❌ [ADMIN] Erro ao carregar pagamentos:', pagamentosError);
+      console.error(`❌ [ADMIN-${fetchId}] Erro ao carregar pagamentos:`, pagamentosError);
       setError(`Erro ao carregar pagamentos: ${pagamentosError.message}`);
     } else {
-      console.log('✅ [ADMIN] Pagamentos carregados:', pagamentosData?.length || 0);
+      console.log(`✅ [ADMIN-${fetchId}] Pagamentos carregados:`, pagamentosData?.length || 0);
     }
     
     if (transacoesError) {
-      console.error('❌ [ADMIN] Erro ao carregar transações:', transacoesError);
+      console.error(`❌ [ADMIN-${fetchId}] Erro ao carregar transações:`, transacoesError);
       setError(prev => prev + ` Erro ao carregar transações: ${transacoesError.message}`);
     } else {
-      console.log('✅ [ADMIN] Transações carregadas:', transacoesData?.length || 0);
+      console.log(`✅ [ADMIN-${fetchId}] Transações carregadas:`, transacoesData?.length || 0);
     }
     
+    console.log(`💾 [ADMIN-${fetchId}] Salvando no estado - pagamentos:`, pagamentosData?.length || 0, 'transações:', transacoesData?.length || 0);
     setPagamentos(pagamentosData || []);
     setTransacoes(transacoesData || []);
     setLoading(false);
   }
 
   async function atualizarStatusPorSolicitacao(receipt_url, status) {
+    console.log('🔄 [ADMIN] Atualizando status - receipt_url:', receipt_url, 'novo status:', status);
     setLoading(true);
-    await supabase.from('payments').update({ status }).eq('receipt_url', receipt_url);
+    const { data, error } = await supabase.from('payments').update({ status }).eq('receipt_url', receipt_url);
+    console.log('🔄 [ADMIN] Resultado update - data:', data, 'error:', error);
     await fetchData();
   }
 
   async function registrarTransacao() {
+    console.log('💰 [ADMIN] Registrando transação - tipo:', tipoTransacao, 'valor:', valorTransacao, 'descrição:', descricaoTransacao);
+    
     // Validação
     const valorValidation = validateAmount(valorTransacao);
     if (!valorValidation.valid) {
@@ -95,8 +127,10 @@ export default function AdminPanel({ user }) {
       admin_id: user.id
     });
     if (error) {
+      console.error('❌ [ADMIN] Erro ao registrar transação:', error);
       alert('Erro ao registrar transação.');
     } else {
+      console.log('✅ [ADMIN] Transação registrada com sucesso');
       setShowModal(false);
       setValorTransacao('');
       setDescricaoTransacao('');

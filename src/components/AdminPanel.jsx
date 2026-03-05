@@ -13,22 +13,50 @@ export default function AdminPanel({ user }) {
   const [descricaoTransacao, setDescricaoTransacao] = useState('');
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    // Garante que RLS está configurado antes de buscar dados
+    const initData = async () => {
+      console.log('🔧 [ADMIN] Configurando RLS antes de buscar dados...');
+      await supabase.rpc('set_current_user_id', { user_id: user.id });
+      await fetchData();
+    };
+    initData();
+  }, [user.id]);
 
   async function fetchData() {
     setLoading(true);
     setError('');
-    const { data: pagamentosData, error: pagamentosError } = await supabase
-      .from('payments')
-      .select('*, profiles(username)')
-      .order('created_at', { ascending: false });
-    const { data: transacoesData, error: transacoesError } = await supabase
-      .from('transactions')
-      .select('*, profiles(username)')
-      .order('created_at', { ascending: false });
-    if (pagamentosError) setError('Erro ao carregar pagamentos.');
-    if (transacoesError) setError('Erro ao carregar transações.');
+    
+    console.log('🔍 [ADMIN] Buscando dados...');
+    
+    // Faz as duas consultas em paralelo e aguarda ambas
+    const [pagamentosResult, transacoesResult] = await Promise.all([
+      supabase
+        .from('payments')
+        .select('*, profiles(username)')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('transactions')
+        .select('*, profiles(username)')
+        .order('created_at', { ascending: false })
+    ]);
+    
+    const { data: pagamentosData, error: pagamentosError } = pagamentosResult;
+    const { data: transacoesData, error: transacoesError } = transacoesResult;
+    
+    if (pagamentosError) {
+      console.error('❌ [ADMIN] Erro ao carregar pagamentos:', pagamentosError);
+      setError(`Erro ao carregar pagamentos: ${pagamentosError.message}`);
+    } else {
+      console.log('✅ [ADMIN] Pagamentos carregados:', pagamentosData?.length || 0);
+    }
+    
+    if (transacoesError) {
+      console.error('❌ [ADMIN] Erro ao carregar transações:', transacoesError);
+      setError(prev => prev + ` Erro ao carregar transações: ${transacoesError.message}`);
+    } else {
+      console.log('✅ [ADMIN] Transações carregadas:', transacoesData?.length || 0);
+    }
+    
     setPagamentos(pagamentosData || []);
     setTransacoes(transacoesData || []);
     setLoading(false);
@@ -90,7 +118,17 @@ export default function AdminPanel({ user }) {
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded shadow p-4 sm:p-6 mt-4 sm:mt-8 border border-[var(--color-laranja-itau)]">
-      <h2 className="text-xl font-bold mb-4 text-[var(--color-marinho-itau)] tracking-wide">Painel do Admin</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold text-[var(--color-marinho-itau)] tracking-wide">Painel do Admin</h2>
+        <button 
+          onClick={fetchData}
+          disabled={loading}
+          className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Atualizar dados"
+        >
+          {loading ? '⟳' : '↻'} Atualizar
+        </button>
+      </div>
       
       {/* Saldo Disponível */}
       <div className="bg-[var(--color-laranja-itau)] text-white rounded-lg p-4 mb-4 shadow">
@@ -112,7 +150,15 @@ export default function AdminPanel({ user }) {
         </div>
       </div>
 
-      {error && <div className="text-red-600 mb-2">{error}</div>}
+      {error && <div className="text-red-600 mb-2">
+        {error}
+        <button 
+          onClick={fetchData} 
+          className="ml-2 bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
+        >
+          Tentar novamente
+        </button>
+      </div>}
       
       {/* Modal de Transação */}
       {showModal && (
@@ -154,36 +200,43 @@ export default function AdminPanel({ user }) {
       <div className="mb-6">
         <h3 className="text-lg font-bold mb-2 text-[var(--color-marinho-itau)]">Histórico de Transações</h3>
         {loading ? <p>Carregando...</p> : (
-          <div className="flex flex-col gap-2">
-            {transacoes.map(t => (
-              <div key={t.id} className="border rounded p-3 bg-gray-50 flex justify-between items-center">
-                <div>
-                  <div className="font-semibold">{t.descricao}</div>
-                  <div className="text-sm text-gray-600">
-                    {new Date(t.created_at).toLocaleDateString('pt-BR')} - {t.profiles?.username || 'Admin'}
+          transacoes.length === 0 ? (
+            <p className="text-gray-500 text-sm">Nenhuma transação registrada.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {transacoes.map(t => (
+                <div key={t.id} className="border rounded p-3 bg-gray-50 flex justify-between items-center">
+                  <div>
+                    <div className="font-semibold">{t.descricao}</div>
+                    <div className="text-sm text-gray-600">
+                      {new Date(t.created_at).toLocaleDateString('pt-BR')} - {t.profiles?.username || 'Admin'}
+                    </div>
+                  </div>
+                  <div className={`font-bold text-lg ${t.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>
+                    {t.tipo === 'entrada' ? '+' : '-'} R$ {Number(t.valor).toFixed(2).replace('.', ',')}
                   </div>
                 </div>
-                <div className={`font-bold text-lg ${t.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>
-                  {t.tipo === 'entrada' ? '+' : '-'} R$ {Number(t.valor).toFixed(2).replace('.', ',')}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )
         )}
       </div>
 
       {/* Solicitações de Pagamento */}
       <h3 className="text-lg font-bold mb-2 text-[var(--color-marinho-itau)]">Solicitações de Pagamento</h3>
       {loading ? <p>Carregando...</p> : (
-        <div className="flex flex-col gap-4">
-          {Object.entries(
-            pagamentos.reduce((acc, p) => {
-              const key = `${p.user_id}|${p.receipt_url}`;
-              if (!acc[key]) acc[key] = [];
-              acc[key].push(p);
-              return acc;
-            }, {})
-          ).map(([key, group]) => {
+        pagamentos.length === 0 ? (
+          <p className="text-gray-500 text-sm">Nenhuma solicitação de pagamento.</p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {Object.entries(
+              pagamentos.reduce((acc, p) => {
+                const key = `${p.user_id}|${p.receipt_url}`;
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(p);
+                return acc;
+              }, {})
+            ).map(([key, group]) => {
             const usuario = group[0].profiles?.username || '-';
             const meses = group.map(p => p.month_ref).join(', ');
             const valor = group.reduce((sum, p) => sum + Number(p.amount), 0).toFixed(2).replace('.', ',');
@@ -220,7 +273,8 @@ export default function AdminPanel({ user }) {
               </div>
             );
           })}
-        </div>
+          </div>
+        )
       )}
     </div>
   );

@@ -33,27 +33,34 @@ export default function UserDashboard({ user }) {
   const inputRef = useRef();
 
   useEffect(() => {
-    async function fetchPagamentos() {
-      setLoading(true);
-      setLoadingError('');
-      console.log('🔍 [DASHBOARD] Buscando pagamentos para user_id:', user.id);
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('user_id', user.id);
-      
-      if (error) {
-        console.error('❌ [DASHBOARD] Erro ao buscar pagamentos:', error);
-        setLoadingError(`Erro ao carregar dados: ${error.message}`);
-        setPagamentos([]);
-      } else {
-        console.log('✅ [DASHBOARD] Pagamentos carregados:', data?.length || 0);
-        setPagamentos(data || []);
-      }
-      setLoading(false);
-    }
-    fetchPagamentos();
+    // Garante que RLS está configurado antes de buscar dados
+    const initData = async () => {
+      console.log('🔧 [DASHBOARD] Configurando RLS antes de buscar dados...');
+      await supabase.rpc('set_current_user_id', { user_id: user.id });
+      await fetchPagamentos();
+    };
+    initData();
   }, [user.id]);
+  
+  async function fetchPagamentos() {
+    setLoading(true);
+    setLoadingError('');
+    console.log('🔍 [DASHBOARD] Buscando pagamentos para user_id:', user.id);
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('user_id', user.id);
+    
+    if (error) {
+      console.error('❌ [DASHBOARD] Erro ao buscar pagamentos:', error);
+      setLoadingError(`Erro ao carregar dados: ${error.message}`);
+      setPagamentos([]);
+    } else {
+      console.log('✅ [DASHBOARD] Pagamentos carregados:', data?.length || 0);
+      setPagamentos(data || []);
+    }
+    setLoading(false);
+  }
 
   const mesesPagos = pagamentos.filter(p => p.status === 'approved').map(p => p.month_ref);
   const mesesPendentes = MESES_2026.filter(m => {
@@ -121,18 +128,24 @@ export default function UserDashboard({ user }) {
       setSelectedMeses([]);
       setValor('');
       // Recarrega lista de pagamentos
-      const { data } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('user_id', user.id);
-      setPagamentos(data || []);
+      await fetchPagamentos();
     }
     setUploading(false);
   }
 
   return (
     <div className="max-w-md mx-auto bg-white rounded shadow p-4 sm:p-6 mt-4 sm:mt-8 border border-[var(--color-laranja-itau)]">
-      <h2 className="text-xl font-bold mb-4 text-[var(--color-marinho-itau)] tracking-wide">Olá, {user.username}!</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold text-[var(--color-marinho-itau)] tracking-wide">Olá, {user.username}!</h2>
+        <button 
+          onClick={fetchPagamentos}
+          disabled={loading}
+          className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Atualizar dados"
+        >
+          {loading ? '⟳' : '↻'}
+        </button>
+      </div>
       {loadingError && (
         <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
           {loadingError}

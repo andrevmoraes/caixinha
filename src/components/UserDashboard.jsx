@@ -173,66 +173,71 @@ export default function UserDashboard({ user }) {
       return;
     }
 
-    const fileExt = file.name.split('.').pop();
     // Remove acentos, barras e caracteres especiais dos nomes dos meses
     const sanitize = (str) => str
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
       .replace(/[^a-zA-Z0-9_-]/g, '_'); // substitui caracteres especiais por underscore
     const mesesSelecionados = [...selectedMeses];
-    const safeMeses = mesesSelecionados.map(m => sanitize(m));
-    const filePath = `${user.id}/${safeMeses.join('_')}.${fileExt}`;
-    console.group('📤 [UPLOAD] Iniciando envio ao Storage');
-    console.log('📄 Arquivo:', {
-      name: file.name,
-      type: file.type,
-      size: file.size
-    });
-    console.log('🗂️ Meses selecionados (raw):', mesesSelecionados);
-    console.log('🗂️ Meses sanitizados para nome do arquivo:', safeMeses);
-    console.log('🧭 filePath final:', filePath);
 
-    const uploadFile = async () => supabase.storage.from('receipts').upload(filePath, file);
-    let { error: uploadError } = await uploadFile();
+    let filePath = null;
 
-    if (uploadError) {
-      console.error('❌ [UPLOAD] Erro no primeiro upload:', {
-        message: uploadError.message,
-        statusCode: uploadError.statusCode,
-        error: uploadError.error,
-        name: uploadError.name
+    if (file) {
+      const fileExt = file.name.split('.').pop();
+      const safeMeses = mesesSelecionados.map(m => sanitize(m));
+      filePath = `${user.id}/${safeMeses.join('_')}.${fileExt}`;
+      console.group('📤 [UPLOAD] Iniciando envio ao Storage');
+      console.log('📄 Arquivo:', {
+        name: file.name,
+        type: file.type,
+        size: file.size
       });
-    }
+      console.log('🗂️ Meses selecionados (raw):', mesesSelecionados);
+      console.log('🗂️ Meses sanitizados para nome do arquivo:', safeMeses);
+      console.log('🧭 filePath final:', filePath);
 
-    // Em ambientes com pooling, a conexão pode trocar entre requisições.
-    // Tenta reconfigurar o contexto e repetir uma vez quando for erro de RLS.
-    if (uploadError && /row-level security|violates row-level security policy/i.test(uploadError.message || '')) {
-      console.warn('⚠️ [UPLOAD] Erro de RLS no storage. Reconfigurando contexto e tentando novamente...');
-      try {
-        await ensureRlsContext('upload_retry');
-        await logRlsSnapshot('antes do retry do upload');
-      } catch (rlsError) {
-        console.error('❌ [UPLOAD] Não foi possível reconfigurar RLS para retry:', rlsError);
-      }
-      const retry = await uploadFile();
-      uploadError = retry.error;
+      const uploadFile = async () => supabase.storage.from('receipts').upload(filePath, file);
+      let { error: uploadError } = await uploadFile();
+
       if (uploadError) {
-        console.error('❌ [UPLOAD] Retry também falhou:', {
+        console.error('❌ [UPLOAD] Erro no primeiro upload:', {
           message: uploadError.message,
           statusCode: uploadError.statusCode,
           error: uploadError.error,
           name: uploadError.name
         });
       }
-    }
 
-    if (uploadError) {
+      // Em ambientes com pooling, a conexão pode trocar entre requisições.
+      // Tenta reconfigurar o contexto e repetir uma vez quando for erro de RLS.
+      if (uploadError && /row-level security|violates row-level security policy/i.test(uploadError.message || '')) {
+        console.warn('⚠️ [UPLOAD] Erro de RLS no storage. Reconfigurando contexto e tentando novamente...');
+        try {
+          await ensureRlsContext('upload_retry');
+          await logRlsSnapshot('antes do retry do upload');
+        } catch (rlsError) {
+          console.error('❌ [UPLOAD] Não foi possível reconfigurar RLS para retry:', rlsError);
+        }
+        const retry = await uploadFile();
+        uploadError = retry.error;
+        if (uploadError) {
+          console.error('❌ [UPLOAD] Retry também falhou:', {
+            message: uploadError.message,
+            statusCode: uploadError.statusCode,
+            error: uploadError.error,
+            name: uploadError.name
+          });
+        }
+      }
+
+      if (uploadError) {
+        console.groupEnd();
+        setUploadMsg(`Erro ao enviar comprovante: ${uploadError.message}`);
+        setUploading(false);
+        return;
+      }
+      console.log('✅ [UPLOAD] Arquivo enviado com sucesso para:', filePath);
       console.groupEnd();
-      setUploadMsg(`Erro ao enviar comprovante: ${uploadError.message}`);
-      setUploading(false);
-      return;
     }
-    console.log('✅ [UPLOAD] Arquivo enviado com sucesso para:', filePath);
-    console.groupEnd();
 
     // Cria um registro para cada mês selecionado
     console.log('📝 [UPLOAD] Criando registros de pagamento - user.id:', user.id);
@@ -274,7 +279,7 @@ export default function UserDashboard({ user }) {
     if (erroRegistro) {
       setUploadMsg(`Erro ao registrar pagamento: ${erroRegistro.message}, code: ${erroRegistro.code}`);
     } else {
-      setUploadMsg('Comprovante enviado! Aguarde aprovação.');
+      setUploadMsg('Solicitação enviada! Aguarde aprovação.');
       setFile(null);
       setSelectedMeses([]);
       setValor('');
@@ -378,7 +383,7 @@ export default function UserDashboard({ user }) {
             <span className="ml-2 text-gray-500">Selecione os meses acima</span>
           )}
         </div>
-        <label className="block mb-2 font-semibold">Anexar comprovante:</label>
+        <label className="block mb-2 font-semibold">Anexar comprovante (opcional):</label>
         <input 
           type="file" 
           accept="image/*,application/pdf" 
@@ -387,8 +392,8 @@ export default function UserDashboard({ user }) {
           disabled={uploading}
           key={uploadMsg} 
         />
-        <button type="submit" className="bg-[var(--color-laranja-itau)] text-white px-4 py-2 rounded font-semibold hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed" disabled={!file || uploading || selectedMeses.length === 0}>
-          {uploading ? 'Enviando...' : 'Enviar comprovante'}
+        <button type="submit" className="bg-[var(--color-laranja-itau)] text-white px-4 py-2 rounded font-semibold hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed" disabled={uploading || selectedMeses.length === 0}>
+          {uploading ? 'Enviando...' : 'Enviar solicitação'}
         </button>
         {uploadMsg && <div className={`mt-2 text-sm font-semibold ${uploadMsg.includes('Erro') ? 'text-red-600' : 'text-green-700'}`}>{uploadMsg}</div>}
       </form>

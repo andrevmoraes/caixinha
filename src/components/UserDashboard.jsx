@@ -8,6 +8,18 @@ const MESES_2026 = [
   'Setembro/2026', 'Outubro/2026', 'Novembro/2026', 'Dezembro/2026'
 ];
 
+function decodeHtmlEntities(value) {
+  if (typeof value !== 'string') return value;
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
 export default function UserDashboard({ user }) {
   const [pagamentos, setPagamentos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,16 +44,53 @@ export default function UserDashboard({ user }) {
   const pixKey = '19997132723';
   const inputRef = useRef();
 
+  async function ensureRlsContext(reason = 'generic') {
+    const { data, error } = await supabase.rpc('set_current_user_id', { user_id: user.id });
+    if (error) {
+      console.error(`❌ [RLS] Falha ao configurar contexto (${reason})`, error);
+      throw error;
+    }
+    console.log(`✅ [RLS] Contexto configurado (${reason})`, data);
+  }
+
+  async function logRlsSnapshot(label) {
+    console.group(`🧪 [RLS-SNAPSHOT] ${label}`);
+    console.log('👤 user.id:', user.id, 'username:', user.username, 'is_admin:', user.is_admin);
+
+    const { data: rlsConfig, error: rlsConfigError } = await supabase.rpc('get_current_rls_config');
+    if (rlsConfigError) {
+      console.warn('⚠️ get_current_rls_config indisponível ou falhou:', {
+        message: rlsConfigError.message,
+        code: rlsConfigError.code,
+        details: rlsConfigError.details,
+        hint: rlsConfigError.hint
+      });
+    } else {
+      console.log('🔎 get_current_rls_config:', rlsConfig);
+    }
+
+    const { data: listData, error: listError } = await supabase.storage.from('receipts').list(user.id, { limit: 1 });
+    if (listError) {
+      console.warn('⚠️ Probe list(receipts/user.id) falhou:', {
+        message: listError.message,
+        statusCode: listError.statusCode,
+        error: listError.error
+      });
+    } else {
+      console.log('✅ Probe list(receipts/user.id) ok. Itens retornados:', listData?.length || 0);
+    }
+    console.groupEnd();
+  }
+
   useEffect(() => {
     // Garante que RLS está configurado antes de buscar dados
     const initData = async () => {
       console.log('🔧 [DASHBOARD] Iniciando configuração - user.id:', user.id, 'username:', user.username);
-      const { data: rlsData, error: rlsError } = await supabase.rpc('set_current_user_id', { user_id: user.id });
-      console.log('🔧 [DASHBOARD] Resultado RLS - data:', rlsData, 'error:', rlsError);
-      if (rlsError) {
-        console.error('❌ [DASHBOARD] ERRO ao configurar RLS:', rlsError);
-      } else {
+      try {
+        await ensureRlsContext('init');
         console.log('✅ [DASHBOARD] RLS configurado com sucesso');
+      } catch (rlsError) {
+        console.error('❌ [DASHBOARD] ERRO ao configurar RLS:', rlsError);
       }
       await fetchPagamentos();
     };
@@ -53,6 +102,14 @@ export default function UserDashboard({ user }) {
     setLoadingError('');
     console.log('🔍 [DASHBOARD] Buscando pagamentos para user_id:', user.id);
     console.log('🔍 [DASHBOARD] Timestamp:', new Date().toISOString());
+    
+    // Reconfigura RLS antes da query (garante que a conexão atual tem o contexto correto)
+    console.log('🔧 [DASHBOARD] Reconfigurando RLS antes da query...');
+    try {
+      await ensureRlsContext('fetch_pagamentos');
+    } catch (rlsError) {
+      console.error('❌ [DASHBOARD] Erro ao reconfigurar RLS:', rlsError);
+    }
     
     const { data, error, status, statusText } = await supabase
       .from('payments')
@@ -68,9 +125,13 @@ export default function UserDashboard({ user }) {
       setLoadingError(`Erro ao carregar dados: ${error.message}`);
       setPagamentos([]);
     } else {
+      const normalizedData = (data || []).map((payment) => ({
+        ...payment,
+        month_ref: decodeHtmlEntities(payment.month_ref)
+      }));
       console.log('✅ [DASHBOARD] Pagamentos carregados:', data?.length || 0);
       console.log('💾 [DASHBOARD] Salvando no estado...');
-      setPagamentos(data || []);
+      setPagamentos(normalizedData);
     }
     setLoading(false);
   }
@@ -102,31 +163,108 @@ export default function UserDashboard({ user }) {
 
     setUploading(true);
     setUploadMsg('');
+
+    try {
+      await ensureRlsContext('upload_start');
+      await logRlsSnapshot('antes do upload');
+    } catch (rlsError) {
+      setUploadMsg(`Erro ao configurar sessão de upload: ${rlsError.message}`);
+      setUploading(false);
+      return;
+    }
+
     const fileExt = file.name.split('.').pop();
     // Remove acentos, barras e caracteres especiais dos nomes dos meses
     const sanitize = (str) => str
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
       .replace(/[^a-zA-Z0-9_-]/g, '_'); // substitui caracteres especiais por underscore
-    const safeMeses = monthsValidation.sanitized.map(m => sanitize(m));
+    const mesesSelecionados = [...selectedMeses];
+    const safeMeses = mesesSelecionados.map(m => sanitize(m));
     const filePath = `${user.id}/${safeMeses.join('_')}.${fileExt}`;
-    let { error: uploadError } = await supabase.storage.from('receipts').upload(filePath, file);
+    console.group('📤 [UPLOAD] Iniciando envio ao Storage');
+    console.log('📄 Arquivo:', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
+    console.log('🗂️ Meses selecionados (raw):', mesesSelecionados);
+    console.log('🗂️ Meses sanitizados para nome do arquivo:', safeMeses);
+    console.log('🧭 filePath final:', filePath);
+
+    const uploadFile = async () => supabase.storage.from('receipts').upload(filePath, file);
+    let { error: uploadError } = await uploadFile();
+
     if (uploadError) {
+      console.error('❌ [UPLOAD] Erro no primeiro upload:', {
+        message: uploadError.message,
+        statusCode: uploadError.statusCode,
+        error: uploadError.error,
+        name: uploadError.name
+      });
+    }
+
+    // Em ambientes com pooling, a conexão pode trocar entre requisições.
+    // Tenta reconfigurar o contexto e repetir uma vez quando for erro de RLS.
+    if (uploadError && /row-level security|violates row-level security policy/i.test(uploadError.message || '')) {
+      console.warn('⚠️ [UPLOAD] Erro de RLS no storage. Reconfigurando contexto e tentando novamente...');
+      try {
+        await ensureRlsContext('upload_retry');
+        await logRlsSnapshot('antes do retry do upload');
+      } catch (rlsError) {
+        console.error('❌ [UPLOAD] Não foi possível reconfigurar RLS para retry:', rlsError);
+      }
+      const retry = await uploadFile();
+      uploadError = retry.error;
+      if (uploadError) {
+        console.error('❌ [UPLOAD] Retry também falhou:', {
+          message: uploadError.message,
+          statusCode: uploadError.statusCode,
+          error: uploadError.error,
+          name: uploadError.name
+        });
+      }
+    }
+
+    if (uploadError) {
+      console.groupEnd();
       setUploadMsg(`Erro ao enviar comprovante: ${uploadError.message}`);
       setUploading(false);
       return;
     }
+    console.log('✅ [UPLOAD] Arquivo enviado com sucesso para:', filePath);
+    console.groupEnd();
+
     // Cria um registro para cada mês selecionado
     console.log('📝 [UPLOAD] Criando registros de pagamento - user.id:', user.id);
     let erroRegistro = null;
-    for (const month_ref of monthsValidation.sanitized) {
+    for (const month_ref of mesesSelecionados) {
       console.log('💾 [UPLOAD] Inserindo mês:', month_ref);
-      const { data: insertData, error: insertError } = await supabase.from('payments').insert({
+      let { data: insertData, error: insertError } = await supabase.from('payments').insert({
         user_id: user.id,
         month_ref,
         amount: 10.00,
         receipt_url: filePath,
         status: 'pending'
       });
+
+      if (insertError && /row-level security|violates row-level security policy/i.test(insertError.message || '')) {
+        console.warn('⚠️ [UPLOAD] Erro de RLS ao inserir pagamento. Reconfigurando e repetindo mês:', month_ref);
+        try {
+          await ensureRlsContext(`insert_retry_${month_ref}`);
+        } catch (rlsError) {
+          console.error('❌ [UPLOAD] Falha ao reconfigurar RLS para retry de insert:', rlsError);
+        }
+        const retryInsert = await supabase.from('payments').insert({
+          user_id: user.id,
+          month_ref,
+          amount: 10.00,
+          receipt_url: filePath,
+          status: 'pending'
+        });
+        insertData = retryInsert.data;
+        insertError = retryInsert.error;
+      }
+
       console.log('📊 [UPLOAD] Resultado INSERT - data:', insertData, 'error:', insertError);
       if (insertError) {
         console.error('❌ [UPLOAD] ERRO COMPLETO:', JSON.stringify(insertError, null, 2));

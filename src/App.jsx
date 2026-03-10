@@ -63,38 +63,40 @@ function App() {
       return;
     }
 
-    console.log('✅ [LOGIN] Validações passaram. Buscando perfil no Supabase...');
+    console.log('✅ [LOGIN] Validações passaram. Autenticando via RPC no Supabase...');
     console.log('🔍 [LOGIN] Buscando username:', usernameValidation.sanitized, 'pin:', pinValidation.sanitized);
-    
-    const { data, error, count } = await supabase
-      .from('profiles')
-      .select('*', { count: 'exact' })
-      .eq('username', usernameValidation.sanitized)
-      .eq('pin', pinValidation.sanitized)
-      .maybeSingle();
-    
-    console.log('📊 [LOGIN] Resultado da query - data:', data, 'error:', error, 'count:', count);
+
+    const { data, error } = await supabase.rpc('authenticate_user', {
+      p_username: usernameValidation.sanitized,
+      p_pin: pinValidation.sanitized
+    });
+
+    const userData = Array.isArray(data) ? data[0] : data;
+    console.log('📊 [LOGIN] Resultado da RPC - data:', userData, 'error:', error, 'rawDataLength:', Array.isArray(data) ? data.length : null);
     
     if (error) {
       console.error('❌ [LOGIN] Erro do Supabase:', error);
-      console.error('❌ [LOGIN] IMPORTANTE: Você aplicou o script SQL no Supabase? Veja supabase_security_policies.sql');
-      setLoginError('Erro ao conectar. Verifique se o RLS foi configurado corretamente.');
+      if (error.code === 'PGRST202') {
+        setLoginError('Função de login não encontrada no banco. Aplique o script fix_login_rpc.sql no Supabase.');
+      } else {
+        setLoginError('Erro ao conectar. Verifique a configuração do Supabase.');
+      }
       setLoading(false);
       return;
     }
     
-    if (!data) {
-      console.log('❌ [LOGIN] Nenhum usuário encontrado (RLS pode estar bloqueando ou credenciais incorretas)');
+    if (!userData) {
+      console.log('❌ [LOGIN] Nenhum usuário encontrado (credenciais inválidas ou usuário inexistente)');
       setLoginError('Usuário ou PIN inválido.');
       setLoading(false);
       return;
     }
     
-    console.log('✅ [LOGIN] Usuário encontrado:', data.username, 'id:', data.id, 'is_admin:', data.is_admin);
+    console.log('✅ [LOGIN] Usuário encontrado:', userData.username, 'id:', userData.id, 'is_admin:', userData.is_admin);
     console.log('🔧 [LOGIN] Configurando current_user_id para RLS...');
     
     // Configurar user_id para RLS
-    const { data: rlsData, error: rpcError } = await supabase.rpc('set_current_user_id', { user_id: data.id });
+    const { data: rlsData, error: rpcError } = await supabase.rpc('set_current_user_id', { user_id: userData.id });
     
     if (rpcError) {
       console.error('❌ [LOGIN] Erro ao configurar RLS:', rpcError);
@@ -102,13 +104,13 @@ function App() {
       console.log('✅ [LOGIN] RLS configurado com sucesso - data:', rlsData);
     }
     
-    setUser(data);
-    localStorage.setItem('caixinha_user', JSON.stringify(data));
+    setUser(userData);
+    localStorage.setItem('caixinha_user', JSON.stringify(userData));
     setLoading(false);
     
     console.log('🎉 [LOGIN] Login completo! Redirecionando...');
     
-    if (data.is_admin) {
+    if (userData.is_admin) {
       navigate('/admin');
     } else {
       navigate('/dashboard');

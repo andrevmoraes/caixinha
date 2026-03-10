@@ -11,28 +11,33 @@ export default function AdminPanel({ user }) {
   const [tipoTransacao, setTipoTransacao] = useState('saida');
   const [valorTransacao, setValorTransacao] = useState('');
   const [descricaoTransacao, setDescricaoTransacao] = useState('');
-  const [isFetching, setIsFetching] = useState(false);
+  const isFetchingRef = useRef(false);
   const lastUserId = useRef(null);
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
     // Garante que RLS está configurado antes de buscar dados
     const initData = async () => {
-      // Verifica se é o mesmo usuário (evita re-execução no Strict Mode)
-      if (lastUserId.current === user.id && isFetching) {
-        console.log('⚠️ [ADMIN] Mesmo usuário, busca já em andamento, ignorando...');
+      // React 18 Strict Mode chama useEffect duas vezes em desenvolvimento
+      // Usamos useRef para garantir execução única
+      if (hasInitialized.current) {
+        console.log('⚠️ [ADMIN] Componente já inicializado (Strict Mode), ignorando...');
+        return;
+      }
+      
+      hasInitialized.current = true;
+      
+      // Verifica se já está buscando
+      if (isFetchingRef.current) {
+        console.log('⚠️ [ADMIN] Busca já em andamento, ignorando...');
         return;
       }
       
       // Se mudou de usuário, reseta o estado
       if (lastUserId.current !== user.id) {
-        console.log('🔄 [ADMIN] Novo usuário detectado, resetando estado...');
+        console.log('🔄 [ADMIN] Novo usuário detectado:', user.id);
         lastUserId.current = user.id;
-        setIsFetching(false);
-      }
-      
-      if (isFetching) {
-        console.log('⚠️ [ADMIN] Já há uma busca em andamento, ignorando...');
-        return;
+        isFetchingRef.current = false;
       }
       
       console.log('🔧 [ADMIN] Iniciando configuração - user.id:', user.id, 'is_admin:', user.is_admin);
@@ -75,41 +80,57 @@ export default function AdminPanel({ user }) {
     
     initData();
     
-    // Cleanup: reseta o flag quando o componente desmonta
+    // Cleanup: reseta os flags quando o componente desmonta
     return () => {
       console.log('🧹 [ADMIN] Cleanup do useEffect');
-      setIsFetching(false);
+      hasInitialized.current = false;
+      isFetchingRef.current = false;
     };
-  }, [user.id]);
+  }, []); // Array vazio: executa apenas uma vez
 
   async function fetchData() {
-    if (isFetching) {
+    // Proteção síncrona com useRef
+    if (isFetchingRef.current) {
       console.log('⚠️ [ADMIN] fetchData já está em execução, abortando...');
       return;
     }
     
+    // Marca como executando IMEDIATAMENTE
+    isFetchingRef.current = true;
+    
     const fetchId = Date.now();
-    console.log(`🔍 [ADMIN-${fetchId}] Buscando dados...`);
-    console.log(`🔍 [ADMIN-${fetchId}] User ID atual:`, user.id);
-    console.log(`🔍 [ADMIN-${fetchId}] Is admin:`, user.is_admin);
-    console.log(`🔍 [ADMIN-${fetchId}] Timestamp:`, new Date().toISOString());
     
-    setIsFetching(true);
-    setLoading(true);
-    setError('');
+    try {
+      console.log(`🔍 [ADMIN-${fetchId}] Buscando dados...`);
+      console.log(`🔍 [ADMIN-${fetchId}] User ID atual:`, user.id);
+      console.log(`🔍 [ADMIN-${fetchId}] Is admin:`, user.is_admin);
+      console.log(`🔍 [ADMIN-${fetchId}] Timestamp:`, new Date().toISOString());
+      
+      setLoading(true);
+      setError('');
     
-    // Faz as duas consultas em paralelo e aguarda ambas
-    console.log(`📡 [ADMIN-${fetchId}] Iniciando query de pagamentos...`);
-    const pagamentosPromise = supabase
-      .from('payments')
-      .select('*, profiles(username)')
-      .order('created_at', { ascending: false });
+      // CRÍTICO: Reconfigura RLS IMEDIATAMENTE antes das queries
+      // Isso garante que app.is_admin está configurado na conexão atual
+      console.log(`🔧 [ADMIN-${fetchId}] Reconfigurando RLS antes das queries...`);
+      const { data: rlsReconfig, error: rlsError } = await supabase.rpc('set_current_user_id', { user_id: user.id });
+      console.log(`🔧 [ADMIN-${fetchId}] RLS reconfigurado - data:`, rlsReconfig, 'error:', rlsError);
+      
+      if (rlsError) {
+        console.error(`❌ [ADMIN-${fetchId}] Erro ao reconfigurar RLS:`, rlsError);
+      }
     
-    console.log(`📡 [ADMIN-${fetchId}] Iniciando query de transações...`);
-    const transacoesPromise = supabase
-      .from('transactions')
-      .select('*, profiles(username)')
-      .order('created_at', { ascending: false });
+      // Faz as duas consultas em paralelo e aguarda ambas
+      console.log(`📡 [ADMIN-${fetchId}] Iniciando query de pagamentos...`);
+      const pagamentosPromise = supabase
+        .from('payments')
+        .select('*, profiles(username)')
+        .order('created_at', { ascending: false });
+      
+      console.log(`📡 [ADMIN-${fetchId}] Iniciando query de transações...`);
+      const transacoesPromise = supabase
+        .from('transactions')
+        .select('*, profiles(username)')
+        .order('created_at', { ascending: false });
     
     const [pagamentosResult, transacoesResult] = await Promise.all([
       pagamentosPromise,
@@ -152,7 +173,15 @@ export default function AdminPanel({ user }) {
     setPagamentos(pagamentosData || []);
     setTransacoes(transacoesData || []);
     setLoading(false);
-    setIsFetching(false);
+    } catch (error) {
+      console.error(`❌ [ADMIN-${fetchId}] Erro inesperado:`, error);
+      setError(`Erro inesperado: ${error.message}`);
+      setLoading(false);
+    } finally {
+      // Libera o lock SEMPRE, mesmo em caso de erro
+      isFetchingRef.current = false;
+      console.log(`✅ [ADMIN-${fetchId}] Fetch completo, lock liberado`);
+    }
   }
 
   async function atualizarStatusPorSolicitacao(receipt_url, status) {

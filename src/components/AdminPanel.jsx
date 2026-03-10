@@ -184,10 +184,16 @@ export default function AdminPanel({ user }) {
     }
   }
 
-  async function atualizarStatusPorSolicitacao(receipt_url, status) {
-    console.log('🔄 [ADMIN] Atualizando status - receipt_url:', receipt_url, 'novo status:', status);
+  async function atualizarStatusPorSolicitacao(receipt_url, user_id, status) {
+    console.log('🔄 [ADMIN] Atualizando status - receipt_url:', receipt_url, 'user_id:', user_id, 'novo status:', status);
     setLoading(true);
-    const { data, error } = await supabase.from('payments').update({ status }).eq('receipt_url', receipt_url);
+    let query = supabase.from('payments').update({ status });
+    if (receipt_url) {
+      query = query.eq('receipt_url', receipt_url);
+    } else {
+      query = query.is('receipt_url', null).eq('user_id', user_id).eq('status', 'pending');
+    }
+    const { data, error } = await query;
     console.log('🔄 [ADMIN] Resultado update - data:', data, 'error:', error);
     await fetchData();
   }
@@ -405,8 +411,8 @@ export default function AdminPanel({ user }) {
                 </div>
                 {status === 'pendente' && (
                   <div className="flex gap-2 mt-2">
-                    <button onClick={() => atualizarStatusPorSolicitacao(receipt_url, 'approved')} className="bg-green-500 text-white px-3 py-2 rounded font-semibold">Aprovar</button>
-                    <button onClick={() => atualizarStatusPorSolicitacao(receipt_url, 'rejected')} className="bg-red-500 text-white px-3 py-2 rounded font-semibold">Rejeitar</button>
+                    <button onClick={() => atualizarStatusPorSolicitacao(receipt_url, group[0].user_id, 'approved')} className="bg-green-500 text-white px-3 py-2 rounded font-semibold">Aprovar</button>
+                    <button onClick={() => atualizarStatusPorSolicitacao(receipt_url, group[0].user_id, 'rejected')} className="bg-red-500 text-white px-3 py-2 rounded font-semibold">Rejeitar</button>
                   </div>
                 )}
               </div>

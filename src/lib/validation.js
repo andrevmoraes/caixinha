@@ -188,7 +188,7 @@ export function validateTransactionType(tipo) {
  */
 export function validateReceiptFile(file) {
   if (!file) {
-    return { valid: false, error: 'Arquivo não selecionado' };
+    return { valid: true };
   }
 
   // Tipos permitidos

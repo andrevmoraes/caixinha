@@ -215,10 +215,10 @@ export default function AdminPanel({ user }) {
   const saldoDisponivel = totalPagamentosAprovados + totalEntradas - totalSaidas;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="flex-1 flex flex-col bg-gray-50 overflow-x-hidden">
       {/* Cabeçalho com Título */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="bg-white border-b border-gray-200 overflow-x-hidden">
+        <div className="max-w-4xl mx-auto px-4 py-6 w-full">
           <div className="flex justify-between items-center">
             <h1 className="text-3xl font-black text-[var(--color-marinho-itau)] tracking-tight">Painel do Admin</h1>
             <MetroButton 
@@ -235,8 +235,9 @@ export default function AdminPanel({ user }) {
       </div>
 
       {/* Conteúdo Principal */}
-      <div className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-4">
-        {/* Saldo Disponível */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-4 w-full">
+          {/* Saldo Disponível */}
         <SectionCard title="Saldo Disponível">
           {loading ? (
             <div className="grid grid-cols-4 gap-3">
@@ -482,17 +483,18 @@ export default function AdminPanel({ user }) {
             </div>
           )}
         </SectionCard>
+        </div>
       </div>
 
       {/* Modal de Transação */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white border-l-4 border-l-[var(--color-marinho-itau)] p-6 w-full max-w-sm relative">
+          <div className="bg-white border-l-4 border-l-[var(--color-marinho-itau)] p-6 w-full max-w-sm relative overflow-x-hidden">
             <button className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl leading-none" onClick={() => setShowModal(false)}>×</button>
             <h3 className="text-2xl font-bold mb-6 text-[var(--color-marinho-itau)]">
               {tipoTransacao === 'entrada' ? 'Adicionar Dinheiro' : 'Retirar Dinheiro'}
             </h3>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 overflow-x-hidden">
               <div>
                 <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide block mb-2">Valor (R$)</label>
                 <input 

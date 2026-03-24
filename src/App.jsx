@@ -7,7 +7,7 @@ import { validateUsername, validatePin } from './lib/validation';
 import UserDashboard from './components/UserDashboard';
 import AdminPanel from './components/AdminPanel';
 import Header from './components/Header';
-import ProfileModal from './components/ProfileModal';
+import Settings from './components/Settings';
 import ShareTarget from './components/ShareTarget';
 
 function App() {
@@ -15,7 +15,6 @@ function App() {
   const [user, setUser] = useState(null);
   const [loginError, setLoginError] = useState('');
   const [registerError, setRegisterError] = useState('');
-  const [showProfile, setShowProfile] = useState(false);
   const navigate = useNavigate();
 
   // Carrega usuário do localStorage ao montar o componente
@@ -177,7 +176,6 @@ function App() {
   };
 
   const handleLogout = () => {
-    setShowProfile(false);
     setUser(null);
     localStorage.removeItem('caixinha_user');
     navigate('/');
@@ -210,17 +208,10 @@ function App() {
   };
 
   return (
-    <>
-      <Header user={user} onProfileClick={() => setShowProfile(true)} />
-      {showProfile && user && (
-        <ProfileModal
-          user={user}
-          onClose={() => setShowProfile(false)}
-          onLogout={handleLogout}
-          onUpdate={handleUpdateProfile}
-        />
-      )}
-      <Routes>
+    <div className="flex flex-col min-h-screen overflow-x-hidden">
+      <Header user={user} onProfileClick={() => navigate('/settings')} />
+      <div className="flex-1 flex">
+        <Routes>
         <Route
           path="/"
           element={
@@ -271,10 +262,25 @@ function App() {
             )
           }
         />
+        <Route
+          path="/settings"
+          element={
+            user ? (
+              <Settings
+                user={user}
+                onLogout={handleLogout}
+                onUpdate={handleUpdateProfile}
+              />
+            ) : (
+              <Navigate to="/" />
+            )
+          }
+        />
         <Route path="/share-target" element={<ShareTarget />} />
         <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </>
+        </Routes>
+      </div>
+    </div>
   );
 }
 

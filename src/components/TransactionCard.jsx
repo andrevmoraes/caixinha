@@ -34,7 +34,7 @@ export default function TransactionCard({
     return (
       <button
         onClick={onToggle}
-        className="w-full text-left border-l-4 px-4 py-3 flex items-center justify-between gap-3 hover:shadow-md transition cursor-pointer active:scale-98"
+        className="w-full text-left border-l-4 px-4 py-3 flex items-center justify-between gap-3 hover:shadow-md transition cursor-pointer active:scale-98 overflow-x-hidden"
         style={{
           borderLeftColor: borderColor,
           backgroundColor: getCardBackground()
@@ -56,7 +56,7 @@ export default function TransactionCard({
   // Versão expandida
   return (
     <div
-      className="border-l-4 p-6 flex flex-col gap-4"
+      className="border-l-4 p-6 flex flex-col gap-4 overflow-x-hidden"
       style={{
         borderLeftColor: borderColor,
         backgroundColor: getCardBackground()

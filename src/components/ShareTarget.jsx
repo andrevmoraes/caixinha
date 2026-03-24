@@ -17,7 +17,7 @@ export default function ShareTarget() {
   }, [navigate]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen">
+    <div className="flex-1 flex flex-col items-center justify-center">
       <h2 className="text-xl font-bold mb-4">Processando arquivo compartilhado...</h2>
       <p>Redirecionando para o envio do comprovante.</p>
     </div>

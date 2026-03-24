@@ -8,8 +8,8 @@ export default function Header({ user, onProfileClick }) {
   const isOnAdmin = location.pathname === '/admin';
 
   return (
-    <header className="w-full bg-[var(--color-marinho-itau)] text-white border-b-4" style={{ borderBottomColor: 'var(--color-laranja-itau)' }}>
-      <div className="max-w-4xl mx-auto px-4 py-6">
+    <header className="w-full bg-[var(--color-marinho-itau)] text-white border-b-4 overflow-x-hidden" style={{ borderBottomColor: 'var(--color-laranja-itau)' }}>
+      <div className="max-w-4xl mx-auto px-4 py-6 w-full">
         {/* Horizontal: Logo à esquerda, botões à direita */}
         <div className="flex items-center justify-between gap-4">
           {/* Logo */}

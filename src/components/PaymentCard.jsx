@@ -38,7 +38,7 @@ export default function PaymentCard({
     return (
       <button
         onClick={onToggle}
-        className="w-full text-left border-l-4 px-4 py-2 flex items-center justify-between gap-3 hover:opacity-80 transition"
+        className="w-full text-left border-l-4 px-4 py-2 flex items-center justify-between gap-3 hover:opacity-80 transition overflow-x-hidden"
         style={{
           borderLeftColor: status === 'aprovado' ? '#16a34a' : status === 'pendente' ? '#eab308' : '#dc2626',
           backgroundColor: status === 'aprovado' ? '#f0fdf4' : status === 'pendente' ? '#fffbeb' : '#fef2f2'
@@ -58,7 +58,7 @@ export default function PaymentCard({
 
   return (
     <div
-      className="border-l-4 p-6 flex flex-col gap-4"
+      className="border-l-4 p-6 flex flex-col gap-4 overflow-x-hidden"
       style={{
         borderLeftColor: status === 'aprovado' ? '#16a34a' : status === 'pendente' ? '#eab308' : '#dc2626',
         backgroundColor: getCardBackground(status)

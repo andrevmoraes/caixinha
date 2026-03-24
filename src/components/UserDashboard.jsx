@@ -228,10 +228,10 @@ export default function UserDashboard({ user }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="flex-1 flex flex-col bg-gray-50 overflow-x-hidden">
       {/* Cabeçalho com Título */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="bg-white border-b border-gray-200 overflow-x-hidden">
+        <div className="max-w-4xl mx-auto px-4 py-6 w-full">
           <div className="flex justify-between items-center gap-4">
             <h1 className="text-3xl font-black text-[var(--color-marinho-itau)] tracking-tight">Olá, {user.username}!</h1>
             <MetroButton 
@@ -248,8 +248,9 @@ export default function UserDashboard({ user }) {
       </div>
 
       {/* Conteúdo Principal */}
-      <div className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-4">
-        {/* Erro */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-4 w-full">
+          {/* Erro */}
         {loadingError && (
           <SectionCard className="bg-red-50 border-l-4 border-l-red-600">
             <span className="text-red-700">{loadingError}</span>
@@ -258,7 +259,7 @@ export default function UserDashboard({ user }) {
 
         {/* Formulário de Pagamento */}
         <SectionCard title="Registrar Pagamento">
-          <form onSubmit={handleUpload} className="flex flex-col gap-4">
+          <form onSubmit={handleUpload} className="flex flex-col gap-4 overflow-x-hidden">
             <div>
               <label className="block mb-2 font-semibold text-sm">Selecione os meses que está pagando:</label>
               <div className="text-center font-bold text-sm mb-2 text-gray-600">2026</div>
@@ -455,7 +456,9 @@ export default function UserDashboard({ user }) {
             </div>
           )}
         </SectionCard>
+        </div>
       </div>
+
     </div>
   );
 }

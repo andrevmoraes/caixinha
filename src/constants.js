@@ -5,7 +5,7 @@
 
 // ===== CONTACTO & CONFIGURAÇÕES =====
 export const PIX_KEY = '19997132723';
-export const WHATSAPP_NUMBER = '5511940041515';
+export const WHATSAPP_NUMBER = '551140041515';
 
 // ===== TEXTOS DE LABELS =====
 export const LABELS = {

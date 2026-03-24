@@ -6,7 +6,7 @@ export default function SectionCard({
   className = '' 
 }) {
   return (
-    <div className={`${className}`}>
+    <div className={`overflow-x-hidden ${className}`}>
       {title && (
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-bold text-[var(--color-marinho-itau)] tracking-wide">

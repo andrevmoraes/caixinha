@@ -57,3 +57,16 @@ createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </StrictMode>,
 );
+
+// Registrar Service Worker para PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then((reg) => {
+        console.log('Service Worker registrado com sucesso:', reg);
+      })
+      .catch((error) => {
+        console.log('Erro ao registrar Service Worker:', error);
+      });
+  });
+}

@@ -187,8 +187,9 @@ export function validateTransactionType(tipo) {
  * Valida arquivo (comprovante)
  */
 export function validateReceiptFile(file) {
+  // Arquivo é opcional
   if (!file) {
-    return { valid: false, error: 'Arquivo não selecionado' };
+    return { valid: true };
   }
 
   // Tipos permitidos
@@ -242,4 +243,20 @@ export function normalizeString(str) {
 export function validateUuid(uuid) {
   const pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return pattern.test(uuid);
+}
+
+/**
+ * Decodifica entidades HTML
+ * Reverte sanitização feita pelo sanitizeString
+ */
+export function decodeHtmlEntities(value) {
+  if (typeof value !== 'string') return value;
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 }

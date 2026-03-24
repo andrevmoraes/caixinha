@@ -77,7 +77,7 @@ function App() {
     if (error) {
       console.error('❌ [LOGIN] Erro do Supabase:', error);
       if (error.code === 'PGRST202') {
-        setLoginError('Função de login não encontrada no banco. Aplique o script fix_login_rpc.sql no Supabase.');
+        setLoginError('Função de login não encontrada no banco. Verifique a configuração do RPC no Supabase.');
       } else {
         setLoginError('Erro ao conectar. Verifique a configuração do Supabase.');
       }

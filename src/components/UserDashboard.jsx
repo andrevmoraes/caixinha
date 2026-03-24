@@ -150,8 +150,6 @@ export default function UserDashboard({ user }) {
 
       const uploadFile = async () => supabase.storage.from('receipts').upload(filePath, file);
       let { error: uploadError } = await uploadFile();
-      const uploadFile = async () => supabase.storage.from('receipts').upload(filePath, file);
-      let { error: uploadError } = await uploadFile();
 
       if (uploadError) {
         console.error('❌ [UPLOAD] Erro no upload:', uploadError.message);
